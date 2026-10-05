@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>BTC Tracker</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --ink: #1c2530;
+    --muted: #6b7785;
+    --pos: #2e8b57;
+    --neg: #c0392b;
+    --accent: #2c6fbb;
+    --accent-soft: #e6f0fa;
+    --line: #d9dee4;
+    --chip: #eef2f6;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  /* Extra bottom padding + safe-area so submit bar never hides log button */
+  body { padding: 6px 8px calc(140px + env(safe-area-inset-bottom)); }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between;
+    gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 16px; margin: 0; }
+  .periods { display: flex; gap: 4px; flex-wrap: wrap; }
+  .periods button { padding: 5px 9px; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--card); font-size: 12px; font-weight: 600; }
+  .periods button.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .section { background: var(--card); border-radius: 10px; padding: 6px 8px;
+    margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+  .section-head { display: flex; align-items: center; justify-content: space-between;
+    gap: 6px; margin-bottom: 5px; flex-wrap: wrap; }
+  .section-head h2 { font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 0; }
+  .controls { display: flex; gap: 4px; flex-wrap: wrap; }
+  .controls button { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--card); font-size: 11px; font-weight: 600; color: var(--ink); }
+  .controls button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .controls button.danger { color: var(--neg); }
+
+  /* Students */
+  .student-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 4px; }
+  .student { background: var(--bg); border-radius: 7px; padding: 6px 4px;
+    text-align: center; font-size: 13px; font-weight: 600; min-height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid transparent; word-break: break-word; }
+  .student.selected { background: var(--accent-soft); border-color: var(--accent);
+    color: var(--accent); }
+  .group-block { margin-bottom: 6px; }
+  .group-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .group-head .group-name { font-size: 12px; font-weight: 700; padding: 4px 8px;
+    border-radius: 6px; background: var(--bg); border: 2px solid transparent; }
+  .group-head .group-name.selected { background: var(--accent-soft);
+    border-color: var(--accent); color: var(--accent); }
+  .group-head .group-label { font-size: 11px; color: var(--muted); }
+
+  /* Behaviors */
+  .category { margin-bottom: 6px; }
+  .category-title { font-size: 10px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.4px; margin: 0 0 3px 2px; }
+  .behavior-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+    gap: 4px; }
+  .behavior { padding: 6px 4px; border-radius: 7px; border: 2px solid transparent;
+    background: var(--bg); font-size: 12px; font-weight: 600; color: var(--ink);
+    text-align: center; }
+  .behavior.pos { border-color: rgba(46,139,87,0.35); }
+  .behavior.neg { border-color: rgba(192,57,43,0.35); }
+  .behavior.selected { background: var(--accent); color: white; border-color: var(--accent); }
+  .behavior .caret { font-size: 9px; opacity: 0.6; margin-left: 3px; }
+
+  .detail-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0 6px 2px; }
+  .detail-row .detail-label { font-size: 10px; color: var(--muted); align-self: center;
+    margin-right: 3px; }
+  .detail-chip { padding: 3px 7px; border-radius: 12px; background: var(--chip);
+    font-size: 11px; font-weight: 600; border: 2px solid transparent; }
+  .detail-chip.selected { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* Note */
+  .note-wrap { margin-top: 3px; }
+  .note-wrap textarea { width: 100%; min-height: 34px; padding: 6px 8px;
+    border-radius: 7px; border: 1px solid var(--line); font-family: inherit;
+    font-size: 13px; resize: vertical; }
+
+  /* Submit bar — raised above Dropbox floating button + safe-area */
+  .submit-bar { position: fixed; left: 0; right: 0; z-index: 50;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    background: rgba(255,255,255,0.97); border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 6px 8px; backdrop-filter: blur(10px); }
+  .submit-inner { max-width: 900px; margin: 0 auto; display: flex; gap: 6px; align-items: center; }
+  .submit-inner .summary { flex: 1; font-size: 11px; color: var(--muted); line-height: 1.3; }
+  .submit-inner .summary strong { color: var(--ink); }
+  .submit-inner button { padding: 9px 14px; border-radius: 8px; border: none;
+    background: var(--accent); color: white; font-size: 14px; font-weight: 700; }
+  .submit-inner button:disabled { background: #b8c3ce; }
+
+  /* Log */
+  .log-item { padding: 5px 8px; border-radius: 6px; background: var(--bg);
+    margin-bottom: 4px; font-size: 12px; line-height: 1.3; }
+  .log-item .ts { color: var(--muted); font-size: 10px; margin-right: 5px; }
+  .log-item .beh.pos { color: var(--pos); font-weight: 600; }
+  .log-item .beh.neg { color: var(--neg); font-weight: 600; }
+  .log-item .note { color: var(--muted); font-style: italic; font-size: 11px;
+    display: block; margin-top: 1px; }
+  .log-empty { color: var(--muted); font-size: 12px; padding: 2px; }
+
+  /* Modal */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none;
+    align-items: flex-end; z-index: 200; }
+  .modal.open { display: flex; }
+  .modal-inner { background: white; width: 100%; max-height: 85vh; overflow-y: auto;
+    border-radius: 14px 14px 0 0; padding: 14px; }
+  .modal-inner h2 { margin: 0 0 6px; font-size: 16px; }
+  .modal-inner p { font-size: 12px; color: var(--muted); margin: 4px 0; }
+  .modal-inner textarea { width: 100%; font-family: ui-monospace, monospace;
+    font-size: 12px; min-height: 130px; padding: 8px; border-radius: 7px;
+    border: 1px solid var(--line); }
+  .modal-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .modal-actions button { padding: 8px 12px; border-radius: 8px; border: none;
+    background: var(--accent); color: white; font-weight: 700; font-size: 13px; }
+  .modal-actions button.secondary { background: var(--line); color: var(--ink); }
+  .modal-actions button.danger { background: var(--neg); }
+
+  .file-input { display: none; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>BTC Tracker</h1>
+  <div class="periods" id="periods"></div>
+</div>
+
+<!-- STUDENTS -->
+<div class="section">
+  <div class="section-head">
+    <h2>Students</h2>
+    <div class="controls">
+      <button id="viewRosterBtn" onclick="setView('roster')">Roster</button>
+      <button id="viewAlphaBtn" onclick="setView('alpha')">A–Z</button>
+      <button id="viewGroupBtn" onclick="setView('group')">Groups</button>
+      <button onclick="selectAllVisible()">Select all</button>
+      <button onclick="deselectAllStudents()">Clear</button>
+      <button onclick="openRoster()">Edit roster</button>
+      <button onclick="openGroups()">Edit groups</button>
+    </div>
+  </div>
+  <div id="studentsArea"></div>
+</div>
+
+<!-- BEHAVIORS -->
+<div class="section">
+  <div class="section-head">
+    <h2>Behaviors</h2>
+    <div class="controls">
+      <button onclick="deselectAllBehaviors()">Deselect all</button>
+    </div>
+  </div>
+  <div id="behaviorsArea"></div>
+  <div class="note-wrap">
+    <textarea id="noteField" placeholder="Optional note (applies to this entry)"></textarea>
+  </div>
+</div>
+
+<!-- LOG -->
+<div class="section">
+  <div class="section-head">
+    <h2>Log — this period, today</h2>
+    <div class="controls">
+      <button onclick="exportCSV()">Export CSV</button>
+      <button class="danger" onclick="undoLast()">Undo last</button>
+    </div>
+  </div>
+  <div id="logArea"></div>
+</div>
+
+<!-- SUBMIT -->
+<div class="submit-bar">
+  <div class="submit-inner">
+    <div class="summary" id="summary"></div>
+    <button id="submitBtn" onclick="submitEntry()" disabled>Log entry</button>
+  </div>
+</div>
+
+<!-- ROSTER MODAL -->
+<div class="modal" id="rosterModal" onclick="if(event.target===this)closeRoster()">
+  <div class="modal-inner">
+    <h2>Roster — Period <span id="rosterModalPeriod"></span></h2>
+    <p><strong>Import:</strong> pick <code>roster[period].txt</code> or paste below.</p>
+    <p>Accepted formats: one name per line, or <code>period|name</code>.</p>
+    <div class="modal-actions">
+      <button onclick="document.getElementById('rosterFile').click()">Choose file</button>
+      <input class="file-input" type="file" id="rosterFile" accept=".txt,.csv,text/plain" onchange="handleRosterFile(event)">
+      <button class="secondary" onclick="clearRosterForPeriod()">Clear roster</button>
+    </div>
+    <div style="margin-top:8px">
+      <textarea id="rosterTextarea" placeholder="One student name per line"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button onclick="saveRosterFromTextarea()">Save</button>
+      <button class="secondary" onclick="closeRoster()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- GROUPS MODAL -->
+<div class="modal" id="groupsModal" onclick="if(event.target===this)closeGroups()">
+  <div class="modal-inner">
+    <h2>Groups — Period <span id="groupsModalPeriod"></span></h2>
+    <p><strong>Import:</strong> pick <code>groups[period].txt</code> or paste below.</p>
+    <p>Supported formats:<br>
+      <code>Group 1: C, A, E</code><br>
+      <code>Group,Student</code> then <code>1,C</code> (CSV)
+    </p>
+    <div class="modal-actions">
+      <button onclick="document.getElementById('groupFile').click()">Choose file</button>
+      <input class="file-input" type="file" id="groupFile" accept=".txt,.csv,text/plain" onchange="handleGroupFile(event)">
+      <button class="secondary" onclick="clearGroupsForPeriod()">Clear groups</button>
+    </div>
+    <div style="margin-top:8px">
+      <textarea id="groupsTextarea"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button onclick="saveGroupsFromTextarea()">Save</button>
+      <button class="secondary" onclick="closeGroups()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   BTC Tracker v2
+   Storage: localStorage key "btc-tracker"
+   Schema:
+     {
+       rosterByPeriod: { "1": ["A","B",...], ... },
+       groups:         { "1": [["A","B"],["C"]], ... },
+       events:         [ { ts, period, students[], behaviors[{label,sign,detail}], note } ]
+     }
+   Legacy migration: if old "roster" string exists, convert to rosterByPeriod.
+   ========================================================================== */
+
+const STORAGE_KEY = 'btc-tracker';
+
+/* ---------- Placeholder rosters (A, B, C, D, E) for each of 5 periods ---------- */
+const PLACEHOLDER_NAMES = ['A', 'B', 'C', 'D', 'E'];
+const PLACEHOLDER_PERIODS = ['1', '2', '3', '4', '5'];
+function makePlaceholderRoster() {
+  const r = {};
+  PLACEHOLDER_PERIODS.forEach(p => { r[p] = PLACEHOLDER_NAMES.slice(); });
+  return r;
+}
+
+/* ---------- Behaviors (hardcoded, categorized) ---------- */
+const BEHAVIORS = [
+  { category: 'Attendance', items: [
+    { label: 'Present', sign: '+' },
+    { label: 'Tardy',   sign: '-' },
+    { label: 'Absent',  sign: '-' },
+  ]},
+  { category: 'Positive — Engagement', items: [
+    { label: 'Engaged', sign: '+' },
+  ]},
+  { category: 'Positive — Board work', items: [
+    { label: 'Contributed idea', sign: '+' },
+    { label: 'Marker', sign: '+', details: ['Held marker', 'Writing', 'Other'] },
+    { label: 'Attending to board', sign: '+' },
+    { label: 'Big brain moment', sign: '+' },
+    { label: 'Collaboration', sign: '+' },
+    { label: 'Perseverance', sign: '+' },
+  ]},
+  { category: 'Positive — Other', items: [
+    { label: 'Other positive behavior', sign: '+' },
+  ]},
+  { category: 'Negative — Off-task', items: [
+    { label: 'Off task', sign: '-' },
+    { label: 'Away from own board', sign: '-' },
+    { label: 'Lack of collaboration', sign: '-' },
+    { label: 'Lack of perseverance', sign: '-' },
+    { label: 'Phone', sign: '-' },
+    { label: 'Eating/drinking', sign: '-' },
+  ]},
+  { category: 'Negative — Zone', items: [
+    { label: 'Not in correct zone', sign: '-', details: ['Behind counter', 'In closet', 'Other'] },
+    { label: 'Interrupted', sign: '-' },
+  ]},
+  { category: 'Negative — Safety', items: [
+    { label: 'Threw object', sign: '-', details: ['Marker', 'Pencil', 'Eraser', 'Paper', 'Other'] },
+    { label: 'Ran in class', sign: '-' },
+    { label: 'Physical aggression', sign: '-' },
+  ]},
+  { category: 'Negative — Disrespect', items: [
+    { label: 'Disrespect', sign: '-', details: ['Toward teacher', 'Toward student', 'General'] },
+    { label: 'Slur', sign: '-', details: ['Racial', 'Ethnic', 'Homophobic', 'Religious', 'Disability', 'Other'] },
+    { label: 'Insult', sign: '-', details: ['Toward teacher', 'Toward student'] },
+    { label: 'Inappropriate language', sign: '-' },
+  ]},
+  { category: 'Negative — Other', items: [
+    { label: 'Other negative behavior', sign: '-' },
+  ]},
+];
+
+/* ---------- State ---------- */
+let state = loadState();
+let selectedPeriod = null;
+let viewMode = 'roster';                 // 'roster' | 'alpha' | 'group'
+let selectedStudents = new Set();        // keys "period|name"
+let selectedBehaviors = new Map();       // label -> { sign, detail|null, details[]|null }
+
+function loadState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    try {
+      const s = JSON.parse(raw);
+      // Migration from v1 (single "roster" string of period|name lines)
+      if (s.roster && !s.rosterByPeriod) {
+        s.rosterByPeriod = migrateLegacyRoster(s.roster);
+        delete s.roster;
+      }
+      s.rosterByPeriod = s.rosterByPeriod || makePlaceholderRoster();
+      // Ensure all 5 periods exist
+      PLACEHOLDER_PERIODS.forEach(p => {
+        if (!Array.isArray(s.rosterByPeriod[p])) s.rosterByPeriod[p] = PLACEHOLDER_NAMES.slice();
+      });
+      s.groups = s.groups || {};
+      s.events = s.events || [];
+      return s;
+    } catch (e) { /* fall through */ }
+  }
+  return { rosterByPeriod: makePlaceholderRoster(), groups: {}, events: [] };
+}
+function migrateLegacyRoster(text) {
+  const out = {};
+  text.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
+    const idx = line.indexOf('|');
+    if (idx === -1) return;
+    const p = line.slice(0, idx).trim();
+    const n = line.slice(idx + 1).trim();
+    if (!out[p]) out[p] = [];
+    out[p].push(n);
+  });
+  return out;
+}
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+/* ---------- Roster helpers ---------- */
+function periods() {
+  return Object.keys(state.rosterByPeriod).sort();
+}
+function studentsIn(period) {
+  return (state.rosterByPeriod[period] || []).slice();
+}
+function studentKey(period, name) { return period + '|' + name; }
+
+/* ---------- Behavior helpers ---------- */
+function findBehavior(label) {
+  for (const cat of BEHAVIORS) {
+    for (const item of cat.items) {
+      if (item.label === label) return item;
+    }
+  }
+  return null;
+}
+
+/* ---------- Rendering ---------- */
+function render() {
+  renderPeriods();
+  renderViewButtons();
+  renderStudents();
+  renderBehaviors();
+  renderLog();
+  renderSummary();
+}
+function renderPeriods() {
+  const ps = periods();
+  if (!ps.includes(selectedPeriod)) selectedPeriod = ps[0] || null;
+  document.getElementById('periods').innerHTML = ps.map(p =>
+    `<button class="${p === selectedPeriod ? 'active' : ''}" onclick="selectPeriod('${escapeAttr(p)}')">P${escapeHtml(p)}</button>`
+  ).join('');
+}
+function renderViewButtons() {
+  document.getElementById('viewRosterBtn').classList.toggle('active', viewMode === 'roster');
+  document.getElementById('viewAlphaBtn').classList.toggle('active', viewMode === 'alpha');
+  document.getElementById('viewGroupBtn').classList.toggle('active', viewMode === 'group');
+}
+function renderStudents() {
+  const area = document.getElementById('studentsArea');
+  if (!selectedPeriod) { area.innerHTML = '<div class="log-empty">No periods defined.</div>'; return; }
+  const students = studentsIn(selectedPeriod);
+
+  if (viewMode === 'group') {
+    const groups = state.groups[selectedPeriod] || [];
+    if (groups.length === 0) {
+      area.innerHTML = '<div class="log-empty">No groups yet for this period. Tap “Edit groups.”</div>';
+      return;
+    }
+    area.innerHTML = groups.map((g, gi) => {
+      const allSel = g.length > 0 && g.every(n => selectedStudents.has(studentKey(selectedPeriod, n)));
+      return `<div class="group-block">
+        <div class="group-head">
+          <span class="group-name ${allSel ? 'selected' : ''}" onclick="toggleGroup(${gi})">Group ${gi + 1}</span>
+          <span class="group-label">${g.length} student${g.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="student-grid">
+          ${g.map(n => studentButton(n)).join('')}
+        </div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  let ordered = students.slice();
+  if (viewMode === 'alpha') ordered.sort((a, b) => a.localeCompare(b));
+  area.innerHTML = `<div class="student-grid">${ordered.map(n => studentButton(n)).join('')}</div>`;
+}
+function studentButton(name) {
+  const key = studentKey(selectedPeriod, name);
+  const sel = selectedStudents.has(key) ? 'selected' : '';
+  return `<div class="student ${sel}" onclick="toggleStudent('${escapeAttr(name)}')">${escapeHtml(name)}</div>`;
+}
+
+function renderBehaviors() {
+  const area = document.getElementById('behaviorsArea');
+  let html = '';
+  BEHAVIORS.forEach(cat => {
+    html += `<div class="category"><div class="category-title">${escapeHtml(cat.category)}</div>`;
+    html += `<div class="behavior-grid">`;
+    cat.items.forEach(item => {
+      const sel = selectedBehaviors.has(item.label) ? 'selected' : '';
+      const caret = item.details ? '<span class="caret">▾</span>' : '';
+      html += `<div class="behavior ${item.sign === '+' ? 'pos' : 'neg'} ${sel}"
+        onclick="toggleBehavior('${escapeAttr(item.label)}')">${escapeHtml(item.label)}${caret}</div>`;
+    });
+    html += `</div>`;
+    cat.items.forEach(item => {
+      if (!item.details) return;
+      const sel = selectedBehaviors.get(item.label);
+      if (!sel) return;
+      const chips = item.details.map(d => {
+        const on = sel.detail === d ? 'selected' : '';
+        return `<span class="detail-chip ${on}" onclick="pickDetail('${escapeAttr(item.label)}','${escapeAttr(d)}')">${escapeHtml(d)}</span>`;
+      }).join('');
+      html += `<div class="detail-row"><span class="detail-label">${escapeHtml(item.label)} detail:</span>${chips}</div>`;
+    });
+    html += `</div>`;
+  });
+  area.innerHTML = html;
+}
+
+function renderLog() {
+  const today = new Date().toDateString();
+  const items = state.events
+    .filter(e => e.period === selectedPeriod && new Date(e.ts).toDateString() === today)
+    .slice(-25).reverse();
+  const area = document.getElementById('logArea');
+  if (items.length === 0) { area.innerHTML = '<div class="log-empty">No entries yet today.</div>'; return; }
+  area.innerHTML = items.map(e => {
+    const time = new Date(e.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const behHtml = e.behaviors.map(b => {
+      const label = b.detail ? `${b.label} (${b.detail})` : b.label;
+      return `<span class="beh ${b.sign === '+' ? 'pos' : 'neg'}">${escapeHtml(label)}</span>`;
+    }).join(', ');
+    const noteHtml = e.note ? `<span class="note">Note: ${escapeHtml(e.note)}</span>` : '';
+    return `<div class="log-item">
+      <span class="ts">${time}</span>
+      <strong>${e.students.map(escapeHtml).join(', ')}</strong> — ${behHtml}
+      ${noteHtml}
+    </div>`;
+  }).join('');
+}
+
+function renderSummary() {
+  const sCount = selectedStudents.size;
+  const bCount = selectedBehaviors.size;
+  const el = document.getElementById('summary');
+  const btn = document.getElementById('submitBtn');
+  if (sCount === 0 || bCount === 0) {
+    el.textContent = 'Select at least one student and one behavior.';
+    btn.disabled = true;
+    return;
+  }
+  const sNames = [...selectedStudents].map(k => k.split('|')[1]);
+  const bNames = [...selectedBehaviors.keys()];
+  el.innerHTML = `<strong>${sCount}</strong> student${sCount !== 1 ? 's' : ''} (${escapeHtml(sNames.slice(0, 3).join(', '))}${sCount > 3 ? '…' : ''}) · <strong>${bCount}</strong> behavior${bCount !== 1 ? 's' : ''} (${escapeHtml(bNames.slice(0, 2).join(', '))}${bCount > 2 ? '…' : ''})`;
+  btn.disabled = false;
+}
+
+/* ---------- Actions ---------- */
+function selectPeriod(p) {
+  selectedPeriod = p;
+  selectedStudents.clear();
+  render();
+}
+function setView(mode) { viewMode = mode; render(); }
+
+function toggleStudent(name) {
+  const key = studentKey(selectedPeriod, name);
+  if (selectedStudents.has(key)) selectedStudents.delete(key);
+  else selectedStudents.add(key);
+  renderStudents(); renderSummary();
+}
+function toggleGroup(gi) {
+  const groups = state.groups[selectedPeriod] || [];
+  const g = groups[gi] || [];
+  const allSel = g.length > 0 && g.every(n => selectedStudents.has(studentKey(selectedPeriod, n)));
+  g.forEach(n => {
+    const k = studentKey(selectedPeriod, n);
+    if (allSel) selectedStudents.delete(k);
+    else selectedStudents.add(k);
+  });
+  renderStudents(); renderSummary();
+}
+function selectAllVisible() {
+  if (!selectedPeriod) return;
+  if (viewMode === 'group') {
+    const groups = state.groups[selectedPeriod] || [];
+    groups.forEach(g => g.forEach(n => selectedStudents.add(studentKey(selectedPeriod, n))));
+  } else {
+    studentsIn(selectedPeriod).forEach(n => selectedStudents.add(studentKey(selectedPeriod, n)));
+  }
+  renderStudents(); renderSummary();
+}
+function deselectAllStudents() { selectedStudents.clear(); renderStudents(); renderSummary(); }
+
+function toggleBehavior(label) {
+  if (selectedBehaviors.has(label)) {
+    selectedBehaviors.delete(label);
+  } else {
+    const item = findBehavior(label);
+    if (!item) return;
+    selectedBehaviors.set(label, { sign: item.sign, detail: null, details: item.details || null });
+  }
+  renderBehaviors(); renderSummary();
+}
+function pickDetail(label, detail) {
+  const entry = selectedBehaviors.get(label);
+  if (!entry) return;
+  entry.detail = (entry.detail === detail) ? null : detail;
+  renderBehaviors();
+}
+function deselectAllBehaviors() { selectedBehaviors.clear(); renderBehaviors(); renderSummary(); }
+
+function submitEntry() {
+  if (selectedStudents.size === 0 || selectedBehaviors.size === 0) return;
+  const studentNames = [...selectedStudents].map(k => k.split('|')[1]);
+  const behaviorList = [...selectedBehaviors.entries()].map(([label, v]) => ({
+    label, sign: v.sign, detail: v.detail || null
+  }));
+  const note = document.getElementById('noteField').value.trim();
+  state.events.push({
+    ts: Date.now(),
+    period: selectedPeriod,
+    students: studentNames,
+    behaviors: behaviorList,
+    note: note || ''
+  });
+  saveState();
+
+  selectedStudents.clear();
+  selectedBehaviors.clear();
+  document.getElementById('noteField').value = '';
+
+  render();
+  if (navigator.vibrate) navigator.vibrate(20);
+}
+
+function undoLast() {
+  const today = new Date().toDateString();
+  for (let i = state.events.length - 1; i >= 0; i--) {
+    const e = state.events[i];
+    if (e.period === selectedPeriod && new Date(e.ts).toDateString() === today) {
+      state.events.splice(i, 1);
+      break;
+    }
+  }
+  saveState(); renderLog();
+}
+
+/* ---------- Roster modal ---------- */
+function openRoster() {
+  if (!selectedPeriod) return;
+  document.getElementById('rosterModalPeriod').textContent = selectedPeriod;
+  const roster = studentsIn(selectedPeriod);
+  document.getElementById('rosterTextarea').value = roster.join('\n');
+  document.getElementById('rosterModal').classList.add('open');
+}
+function closeRoster() { document.getElementById('rosterModal').classList.remove('open'); }
+
+function handleRosterFile(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const names = parseRosterText(String(reader.result));
+    document.getElementById('rosterTextarea').value = names.join('\n');
+  };
+  reader.readAsText(file);
+  evt.target.value = '';
+}
+function parseRosterText(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const out = [];
+  lines.forEach(line => {
+    // Accept "period|name" too — keep only the name portion
+    const idx = line.indexOf('|');
+    if (idx !== -1) {
+      const n = line.slice(idx + 1).trim();
+      if (n) out.push(n);
+    } else {
+      out.push(line);
+    }
+  });
+  return out;
+}
+function saveRosterFromTextarea() {
+  const text = document.getElementById('rosterTextarea').value;
+  const names = parseRosterText(text);
+  state.rosterByPeriod[selectedPeriod] = names;
+  saveState();
+  closeRoster();
+  // Selection may include names that no longer exist — drop them
+  const valid = new Set(names.map(n => studentKey(selectedPeriod, n)));
+  [...selectedStudents].forEach(k => { if (!valid.has(k)) selectedStudents.delete(k); });
+  render();
+}
+function clearRosterForPeriod() {
+  if (!confirm('Clear roster for period ' + selectedPeriod + '?')) return;
+  state.rosterByPeriod[selectedPeriod] = [];
+  saveState();
+  document.getElementById('rosterTextarea').value = '';
+  selectedStudents.clear();
+  render();
+}
+
+/* ---------- Groups modal ---------- */
+function openGroups() {
+  if (!selectedPeriod) return;
+  document.getElementById('groupsModalPeriod').textContent = selectedPeriod;
+  const groups = state.groups[selectedPeriod] || [];
+  document.getElementById('groupsTextarea').value = groups.map((g, i) =>
+    `Group ${i + 1}: ${g.join(', ')}`
+  ).join('\n');
+  document.getElementById('groupsModal').classList.add('open');
+}
+function closeGroups() { document.getElementById('groupsModal').classList.remove('open'); }
+
+function handleGroupFile(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const parsed = parseGroupsText(String(reader.result));
+    document.getElementById('groupsTextarea').value = parsed.map((g, i) =>
+      `Group ${i + 1}: ${g.join(', ')}`
+    ).join('\n');
+  };
+  reader.readAsText(file);
+  evt.target.value = '';
+}
+
+/**
+ * Detect and parse group text.
+ * Supports:
+ *   "Group 1: C, A, E"    (Group labels + comma-separated names)
+ *   "1: C, A, E"
+ *   "Group,Student\n1,C\n1,A\n..." (CSV)
+ */
+function parseGroupsText(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+
+  const first = lines[0].toLowerCase().replace(/\s+/g, '');
+  if (first.startsWith('group,student')) {
+    const map = new Map();
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(',');
+      if (parts.length < 2) continue;
+      const g = parts[0].trim();
+      const name = parts.slice(1).join(',').trim();
+      if (!g || !name) continue;
+      if (!map.has(g)) map.set(g, []);
+      map.get(g).push(name);
+    }
+    return [...map.values()];
+  }
+
+  const groups = [];
+  for (const line of lines) {
+    const m = line.match(/^(?:group\s*)?\d+\s*[:.]\s*(.+)$/i);
+    if (m) {
+      const names = m[1].split(',').map(s => s.trim()).filter(Boolean);
+      if (names.length) groups.push(names);
+    }
+  }
+  return groups;
+}
+
+function saveGroupsFromTextarea() {
+  const text = document.getElementById('groupsTextarea').value;
+  const parsed = parseGroupsText(text);
+  state.groups[selectedPeriod] = parsed;
+  saveState();
+  closeGroups();
+  if (viewMode !== 'group') viewMode = 'group';
+  render();
+}
+function clearGroupsForPeriod() {
+  if (!confirm('Clear groups for period ' + selectedPeriod + '?')) return;
+  delete state.groups[selectedPeriod];
+  saveState();
+  document.getElementById('groupsTextarea').value = '';
+  render();
+}
+
+/* ---------- Export ---------- */
+function exportCSV() {
+  const rows = [['timestamp', 'period', 'students', 'behaviors', 'note']];
+  state.events.forEach(e => {
+    const students = e.students.join('; ');
+    const behaviors = e.behaviors.map(b =>
+      b.detail ? `${b.label} (${b.detail})` : b.label
+    ).join('; ');
+    rows.push([
+      new Date(e.ts).toISOString(),
+      e.period,
+      students,
+      behaviors,
+      e.note || ''
+    ]);
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `btc-tracker-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- Utils ---------- */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escapeAttr(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+/* ---------- Init ---------- */
+render();
+</script>
+</body>
+</html>
