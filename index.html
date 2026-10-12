@@ -22,7 +22,6 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  /* Extra bottom padding + safe-area so submit bar never hides log button */
   body { padding: 6px 8px calc(140px + env(safe-area-inset-bottom)); }
 
   .topbar { display: flex; align-items: center; justify-content: space-between;
@@ -54,13 +53,20 @@
     border: 2px solid transparent; word-break: break-word; }
   .student.selected { background: var(--accent-soft); border-color: var(--accent);
     color: var(--accent); }
-  .group-block { margin-bottom: 6px; }
-  .group-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-  .group-head .group-name { font-size: 12px; font-weight: 700; padding: 4px 8px;
-    border-radius: 6px; background: var(--bg); border: 2px solid transparent; }
+
+  /* Groups — compact 2-column layout */
+  .group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .group-block { display: flex; align-items: flex-start; gap: 6px;
+    padding: 4px; border-radius: 8px; background: var(--bg); }
+  .group-head { flex: 0 0 auto; }
+  .group-head .group-name { font-size: 12px; font-weight: 700; padding: 4px 7px;
+    border-radius: 6px; background: var(--card); border: 2px solid transparent;
+    white-space: nowrap; }
   .group-head .group-name.selected { background: var(--accent-soft);
     border-color: var(--accent); color: var(--accent); }
-  .group-head .group-label { font-size: 11px; color: var(--muted); }
+  .group-block .student-grid { flex: 1; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 3px; }
+  .group-block .student { min-height: 30px; font-size: 11px; padding: 4px 3px; }
 
   /* Behaviors */
   .category { margin-bottom: 6px; }
@@ -91,10 +97,10 @@
 
   /* Submit bar — raised above Dropbox floating button + safe-area */
   .submit-bar { position: fixed; left: 0; right: 0; z-index: 50;
-    bottom: calc(72px + env(safe-area-inset-bottom));
+    bottom: 0;
     background: rgba(255,255,255,0.97); border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    padding: 6px 8px; backdrop-filter: blur(10px); }
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    backdrop-filter: blur(10px); }
   .submit-inner { max-width: 900px; margin: 0 auto; display: flex; gap: 6px; align-items: center; }
   .submit-inner .summary { flex: 1; font-size: 11px; color: var(--muted); line-height: 1.3; }
   .submit-inner .summary strong { color: var(--ink); }
@@ -245,7 +251,6 @@
        groups:         { "1": [["A","B"],["C"]], ... },
        events:         [ { ts, period, students[], behaviors[{label,sign,detail}], note } ]
      }
-   Legacy migration: if old "roster" string exists, convert to rosterByPeriod.
    ========================================================================== */
 
 const STORAGE_KEY = 'btc-tracker';
@@ -266,19 +271,17 @@ const BEHAVIORS = [
     { label: 'Tardy',   sign: '-' },
     { label: 'Absent',  sign: '-' },
   ]},
-  { category: 'Positive — Engagement', items: [
-    { label: 'Engaged', sign: '+' },
-  ]},
   { category: 'Positive — Board work', items: [
     { label: 'Contributed idea', sign: '+' },
     { label: 'Marker', sign: '+', details: ['Held marker', 'Writing', 'Other'] },
     { label: 'Attending to board', sign: '+' },
-    { label: 'Big brain moment', sign: '+' },
+    { label: 'Big brain moment', sign: '+', details: ['Finish Phase 1', 'Finish Phase 2', 'Finish Phase 3', 'Finish Phase 4', 'Finish Phase 5', 'Finish Phase 6'] },
     { label: 'Collaboration', sign: '+' },
     { label: 'Perseverance', sign: '+' },
   ]},
   { category: 'Positive — Other', items: [
     { label: 'Other positive behavior', sign: '+' },
+    { label: 'Engaged', sign: '+' },
   ]},
   { category: 'Negative — Off-task', items: [
     { label: 'Off task', sign: '-' },
@@ -287,10 +290,6 @@ const BEHAVIORS = [
     { label: 'Lack of perseverance', sign: '-' },
     { label: 'Phone', sign: '-' },
     { label: 'Eating/drinking', sign: '-' },
-  ]},
-  { category: 'Negative — Zone', items: [
-    { label: 'Not in correct zone', sign: '-', details: ['Behind counter', 'In closet', 'Other'] },
-    { label: 'Interrupted', sign: '-' },
   ]},
   { category: 'Negative — Safety', items: [
     { label: 'Threw object', sign: '-', details: ['Marker', 'Pencil', 'Eraser', 'Paper', 'Other'] },
@@ -305,6 +304,8 @@ const BEHAVIORS = [
   ]},
   { category: 'Negative — Other', items: [
     { label: 'Other negative behavior', sign: '-' },
+    { label: 'Not in correct zone', sign: '-', details: ['Behind counter', 'In closet', 'Other'] },
+    { label: 'Interrupted', sign: '-' },
   ]},
 ];
 
@@ -326,7 +327,6 @@ function loadState() {
         delete s.roster;
       }
       s.rosterByPeriod = s.rosterByPeriod || makePlaceholderRoster();
-      // Ensure all 5 periods exist
       PLACEHOLDER_PERIODS.forEach(p => {
         if (!Array.isArray(s.rosterByPeriod[p])) s.rosterByPeriod[p] = PLACEHOLDER_NAMES.slice();
       });
@@ -404,18 +404,17 @@ function renderStudents() {
       area.innerHTML = '<div class="log-empty">No groups yet for this period. Tap “Edit groups.”</div>';
       return;
     }
-    area.innerHTML = groups.map((g, gi) => {
+    area.innerHTML = `<div class="group-grid">` + groups.map((g, gi) => {
       const allSel = g.length > 0 && g.every(n => selectedStudents.has(studentKey(selectedPeriod, n)));
       return `<div class="group-block">
         <div class="group-head">
-          <span class="group-name ${allSel ? 'selected' : ''}" onclick="toggleGroup(${gi})">Group ${gi + 1}</span>
-          <span class="group-label">${g.length} student${g.length !== 1 ? 's' : ''}</span>
+          <span class="group-name ${allSel ? 'selected' : ''}" onclick="toggleGroup(${gi})">G${gi + 1}</span>
         </div>
         <div class="student-grid">
           ${g.map(n => studentButton(n)).join('')}
         </div>
       </div>`;
-    }).join('');
+    }).join('') + `</div>`;
     return;
   }
 
@@ -611,7 +610,6 @@ function parseRosterText(text) {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const out = [];
   lines.forEach(line => {
-    // Accept "period|name" too — keep only the name portion
     const idx = line.indexOf('|');
     if (idx !== -1) {
       const n = line.slice(idx + 1).trim();
@@ -628,7 +626,6 @@ function saveRosterFromTextarea() {
   state.rosterByPeriod[selectedPeriod] = names;
   saveState();
   closeRoster();
-  // Selection may include names that no longer exist — drop them
   const valid = new Set(names.map(n => studentKey(selectedPeriod, n)));
   [...selectedStudents].forEach(k => { if (!valid.has(k)) selectedStudents.delete(k); });
   render();
@@ -668,13 +665,6 @@ function handleGroupFile(evt) {
   evt.target.value = '';
 }
 
-/**
- * Detect and parse group text.
- * Supports:
- *   "Group 1: C, A, E"    (Group labels + comma-separated names)
- *   "1: C, A, E"
- *   "Group,Student\n1,C\n1,A\n..." (CSV)
- */
 function parseGroupsText(text) {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length === 0) return [];
