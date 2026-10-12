@@ -54,19 +54,20 @@
   .student.selected { background: var(--accent-soft); border-color: var(--accent);
     color: var(--accent); }
 
-  /* Groups — compact 2-column layout */
-  .group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  /* Groups — 2-column layout, full-size names */
+  .group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
+  .group-col { display: flex; flex-direction: column; gap: 6px; }
   .group-block { display: flex; align-items: flex-start; gap: 6px;
     padding: 4px; border-radius: 8px; background: var(--bg); }
   .group-head { flex: 0 0 auto; }
-  .group-head .group-name { font-size: 12px; font-weight: 700; padding: 4px 7px;
+  .group-head .group-name { font-size: 12px; font-weight: 700; padding: 4px 8px;
     border-radius: 6px; background: var(--card); border: 2px solid transparent;
     white-space: nowrap; }
   .group-head .group-name.selected { background: var(--accent-soft);
     border-color: var(--accent); color: var(--accent); }
   .group-block .student-grid { flex: 1; display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 3px; }
-  .group-block .student { min-height: 30px; font-size: 11px; padding: 4px 3px; }
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 4px; }
+  .group-block .student { min-height: 38px; font-size: 13px; padding: 6px 4px; }
 
   /* Behaviors */
   .category { margin-bottom: 6px; }
@@ -404,17 +405,26 @@ function renderStudents() {
       area.innerHTML = '<div class="log-empty">No groups yet for this period. Tap “Edit groups.”</div>';
       return;
     }
-    area.innerHTML = `<div class="group-grid">` + groups.map((g, gi) => {
+    const half = Math.ceil(groups.length / 2);
+    const left = groups.slice(0, half);
+    const right = groups.slice(half);
+
+    const buildBlock = (g, gi) => {
       const allSel = g.length > 0 && g.every(n => selectedStudents.has(studentKey(selectedPeriod, n)));
       return `<div class="group-block">
         <div class="group-head">
-          <span class="group-name ${allSel ? 'selected' : ''}" onclick="toggleGroup(${gi})">G${gi + 1}</span>
+          <span class="group-name ${allSel ? 'selected' : ''}" onclick="toggleGroup(${gi})">Group ${gi + 1}</span>
         </div>
         <div class="student-grid">
           ${g.map(n => studentButton(n)).join('')}
         </div>
       </div>`;
-    }).join('') + `</div>`;
+    };
+
+    area.innerHTML = `<div class="group-grid">
+      <div class="group-col">${left.map((g, i) => buildBlock(g, i)).join('')}</div>
+      <div class="group-col">${right.map((g, i) => buildBlock(g, half + i)).join('')}</div>
+    </div>`;
     return;
   }
 
